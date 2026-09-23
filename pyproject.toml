@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emergent-codes"
+version = "0.1.0"
+description = "Can a population of noisy communicating nodes spontaneously develop an error-correcting code?"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "black>=24", "isort>=5"]
+
+[project.scripts]
+emergent-codes = "emergent_codes.cli:main"
+
+[tool.setuptools]
+packages = ["emergent_codes"]
+
+[tool.black]
+line-length = 120
+skip-string-normalization = true
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
