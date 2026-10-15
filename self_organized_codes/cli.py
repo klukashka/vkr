@@ -2,8 +2,8 @@
 
 Examples::
 
-    python -m emergent_codes run --set noise=0.05 n=12 n_roles=4
-    python -m emergent_codes sweep noise 0,0.02,0.05,0.1 --seeds 30 --out results/noise.csv
+    python -m self_organized_codes run --set noise=0.05 n=12 n_roles=4
+    python -m self_organized_codes sweep noise 0,0.02,0.05,0.1 --seeds 30 --out results/noise.csv
 """
 
 import argparse
@@ -16,10 +16,10 @@ from pathlib import Path
 from statistics import mean, stdev
 from typing import Any
 
-from emergent_codes.config import SimConfig
-from emergent_codes.simulation import Simulation
+from self_organized_codes.config import SimConfig
+from self_organized_codes.simulation import Simulation
 
-logger = logging.getLogger("emergent_codes")
+logger = logging.getLogger("self_organized_codes")
 
 SUMMARY_COLUMNS = ("code_size", "d", "d_roles", "d_top", "roles_covered", "purity_mean", "word_error", "role_error")
 
@@ -27,7 +27,9 @@ SUMMARY_COLUMNS = ("code_size", "d", "d_roles", "d_top", "roles_covered", "purit
 def parse_overrides(items: list[str]) -> dict[str, Any]:
     """Parse ``key=value`` strings into typed :class:`SimConfig` fields.
 
-    :raises SystemExit: on an unknown key or unparsable value.
+    :param items: overrides as given on the command line, e.g. ``["noise=0.05", "n=12"]``.
+    :return: field names mapped to their parsed values.
+    :raises SystemExit: on an unknown key or an unparsable value.
     """
     types = SimConfig.field_types()
     result: dict[str, Any] = {}
@@ -40,6 +42,14 @@ def parse_overrides(items: list[str]) -> dict[str, Any]:
 
 
 def parse_value(key: str, raw: str, kind: type) -> Any:
+    """Convert a raw command-line string to the type of a configuration field.
+
+    :param key: field name, used in the error message.
+    :param raw: value as typed by the user.
+    :param kind: target type of the field.
+    :return: the converted value.
+    :raises SystemExit: if the value cannot be converted.
+    """
     try:
         return kind(raw)
     except ValueError:
@@ -47,11 +57,21 @@ def parse_value(key: str, raw: str, kind: type) -> Any:
 
 
 def run_one(cfg: SimConfig) -> dict[str, Any]:
+    """Run one simulation; used as the worker function of a sweep.
+
+    :param cfg: parameters of the run.
+    :return: the configuration fields merged with the end-of-run metrics.
+    """
     result = Simulation(cfg).run()
     return {**cfg.to_dict(), **result.metrics}
 
 
 def cmd_run(args: argparse.Namespace) -> None:
+    """Execute the ``run`` command: one simulation, printed as a table or as JSON.
+
+    :param args: parsed command-line arguments.
+    :raises SystemExit: on an invalid configuration override.
+    """
     cfg = SimConfig(**parse_overrides(args.set))
     logger.info("running %s", cfg)
     result = Simulation(cfg).run(snapshot_every=args.snapshot_every)
@@ -79,6 +99,14 @@ def cmd_run(args: argparse.Namespace) -> None:
 
 
 def cmd_sweep(args: argparse.Namespace) -> None:
+    """Execute the ``sweep`` command: vary one parameter over several seeds in parallel.
+
+    Prints the mean and standard deviation of the summary metrics for every value and optionally writes one CSV row
+    per run.
+
+    :param args: parsed command-line arguments.
+    :raises SystemExit: on an unknown parameter or an invalid value.
+    """
     base = SimConfig(**parse_overrides(args.set))
     kind = SimConfig.field_types().get(args.param)
     if kind is None:
@@ -114,7 +142,11 @@ def cmd_sweep(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="emergent-codes", description=__doc__.split("\n")[0])
+    """Build the argument parser with the ``run`` and ``sweep`` subcommands.
+
+    :return: the configured parser.
+    """
+    parser = argparse.ArgumentParser(prog="self-organized-codes", description=__doc__.split("\n")[0])
     parser.add_argument("-v", "--verbose", action="store_true", help="debug logging")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -136,6 +168,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Parse the command line, configure logging and run the selected command.
+
+    :param argv: arguments without the program name; ``None`` means ``sys.argv[1:]``.
+    :raises SystemExit: on invalid arguments.
+    """
     args = build_parser().parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s %(message)s")
     args.func(args)

@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "emergent-codes"
+name = "self-organized-codes"
 version = "0.1.0"
 description = "Can a population of noisy communicating nodes spontaneously develop an error-correcting code?"
 readme = "README.md"
@@ -14,10 +14,10 @@ dependencies = ["numpy>=1.26"]
 dev = ["pytest>=8", "black>=24", "isort>=5"]
 
 [project.scripts]
-emergent-codes = "emergent_codes.cli:main"
+self-organized-codes = "self_organized_codes.cli:main"
 
 [tool.setuptools]
-packages = ["emergent_codes"]
+packages = ["self_organized_codes"]
 
 [tool.black]
 line-length = 120

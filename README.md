@@ -1,207 +1,250 @@
-# Emergent Codes
+# Самоорганизованные коды
 
-*Русская версия: [README.ru.md](README.ru.md)*
+**Исследование самоорганизации помехоустойчивых кодовых конструкций в имитационной модели передачи информации**
 
-A simulation of information transmission between nodes with distortion, built to answer one question: **can a population spontaneously develop an error-correcting code?**
+*English version: [README.en.md](README.en.md)*
 
----
+Имитационная модель передачи сообщений по зашумлённому каналу в популяции узлов, где отображение сообщений в двоичные векторы не задаётся заранее: каждый узел лишь относит принятый вектор к ближайшему из уже накопленных. Модель позволяет проверить, возникает ли при этом сам собой помехоустойчивый код и как его минимальное расстояние зависит от уровня шума.
 
-## The problem
-
-When information is passed along, it changes. The receiver does not copy a message — it reconstructs it from what it already holds. Yet messages stay recognizable across many hops.
-
-So the interesting question is not where variation comes from, but where **stability** comes from under constant distortion.
-
-One plausible answer: distortions are not random. They are directed, and roughly in the same direction for different receivers, so messages do not drift apart — they converge on forms that are easy to hold. In existing models these forms are supplied by hand as a parameter. Here they are not supplied at all.
-
-## The connection to coding theory
-
-A stable form does exactly what a codeword does: a corrupted message is pulled back to the nearest admissible one, so errors do not accumulate from hop to hop.
-
-The difference is that a code is designed in advance, while here the set of admissible words has to arise on its own.
-
-**Hypothesis.** The minimum distance of the emergent set grows with the channel noise level — the system adapts its redundancy to the transmission conditions.
-
----
-
-## How it works
-
-Nodes exchange binary vectors of fixed length `n` over a noisy channel. Each node holds a set of weighted records. Nothing about which vectors are "correct" is specified anywhere.
-
-**Receiving.** An incoming vector is matched to the nearest record by Hamming distance. Close enough — the record is reinforced and shifted toward the input by bitwise majority. Too far — a new record is created. This is minimum-distance decoding, except the reference set is accumulated rather than given.
-
-**Sending.** A record is drawn with probability proportional to its weight and transmitted; each bit flips with probability `p`.
-
-**Roles.** Each transmission carries a role label — a plain integer in `[0, R)` with no internal structure. It marks *what* the message is about, separately from *how* it looks. If a receiver assigns an incoming vector to a record belonging to a different role, the record is penalized.
-
-Roles exist because without them the system collapses: merging pulls everything toward a single vector, which is perfectly stable and completely useless. The requirement to keep `R` things distinct is what forces the vectors apart — the same requirement that gives a code its minimum distance.
-
-**Forgetting.** Weights decay each tick; records below threshold are dropped. Capacity is bounded by competition, not by an imposed ceiling.
-
----
-
-## What gets measured
-
-After a run, all records from all nodes are pooled and clustered by Hamming distance. Cluster centers are the candidate codewords, and their set `C` is the emergent code.
-
-| Quantity | Meaning |
+| | |
 |---|---|
-| `n` | vector length (fixed) |
-| `\|C\|`, `k = log₂\|C\|` | how many distinct words survived |
-| `d` | minimum distance between distinct words |
-| `d_roles` | minimum distance between words of *different* roles (synonyms ignored) |
-| `d_top` | minimum distance of the code made of the heaviest word of each role (exactly `R` words) — the main metric |
-| purity | share of a cluster's weight carried by its dominant role |
-| error rate | measured directly by pushing `C` through the channel and decoding |
-
-These are then compared against the Hamming (sphere-packing) and Singleton bounds, and against known codes with the same parameters.
+| Автор | Клюкин Павел Александрович, группа М8О-407Б-23 |
+| Научный руководитель | Борисов Август Валерьевич, старший преподаватель |
+| Кафедра | Кафедра 806 «Вычислительная математика и программирование», Московский авиационный институт (национальный исследовательский университет) |
+| Год | 2026 |
+| Состояние | v0.1 — модель, измерение и разведочные эксперименты |
 
 ---
 
-## Experiments
+## Содержание
 
-| # | Varied | Question |
-|---|---|---|
-| 1 | `θ`, `λ` | where are the boundaries between collapse, stability and dispersal? |
-| 2 | **`p`** | **does `d` grow with channel noise?** (main result) |
-| 3 | `R` at fixed `n` | at what point does the system stop coping, and how does that compare to the Hamming bound? |
-| 4 | `N`, `L` | is the result robust to population size and turnover? |
-| 5 | `p = 0` | does anything new arise without noise? (control) |
-| 6 | seeded with Hamming [7,4] | does the dynamics preserve a good code? (control) |
-
-Each configuration is run at least 30 times with different seeds; results are averaged and spread is reported.
-
----
-
-## Design constraints
-
-- **Binary vectors, Hamming distance.** Classical bounds are defined in these terms; anything else would not be comparable.
-- **No admissible set anywhere in the code.** If it were specified, the result would be planted rather than obtained.
-- **Noise in the channel.** Without it "error-correcting" means nothing.
-- **Random initialization.** The poorer the starting point, the stronger the result. Empty stores and seeded codes are used as controls only.
-- **No neural networks.** Every observed effect has to be traceable to a cause, which rules out learned black boxes.
+- [Актуальность](#актуальность)
+- [Цель и задачи](#цель-и-задачи)
+- [Объект и предмет исследования](#объект-и-предмет-исследования)
+- [Модель](#модель)
+- [Что измеряется](#что-измеряется)
+- [Стек технологий](#стек-технологий)
+- [Структура репозитория](#структура-репозитория)
+- [Установка и запуск](#установка-и-запуск)
+- [Параметры модели](#параметры-модели)
+- [Результаты версии v0.1](#результаты-версии-v01)
+- [Известные проблемы](#известные-проблемы)
+- [Дальнейшая работа](#дальнейшая-работа)
+- [Документация](#документация)
 
 ---
 
-## Running
+## Актуальность
 
-Python 3.11+, NumPy only.
+В классической теории кодирования код проектируется заранее: для заданной длины вектора `n` и числа сообщений `R` алгебраически строится отображение сообщений в векторы с нужным минимальным расстоянием `d`, и код известен всем участникам передачи.
 
-```bash
-python3.11 -m venv .venv && .venv/bin/pip install -e '.[dev]'
+Во многих системах так не происходит. Словари естественных языков, сигнальные системы животных, соглашения в децентрализованных сетях и многоагентных системах складываются в ходе многократной передачи между участниками, без центрального проектирования. При этом сообщения остаются узнаваемыми, хотя каждая передача их искажает: получатель не копирует сообщение, а восстанавливает его из того, что уже знает.
 
-# single run; override any SimConfig field with KEY=VALUE
-.venv/bin/python -m emergent_codes run --set noise=0.05 n=12 n_roles=4 --snapshot-every 500
+Отсюда вопрос, которому посвящена работа: обладают ли такие самопроизвольно сложившиеся коды свойствами помехоустойчивых кодов и подстраивается ли их избыточность под уровень шума в канале. В предлагаемой постановке минимальное расстояние перестаёт быть параметром конструкции и становится наблюдаемой величиной, что позволяет сравнивать возникший код с классическими границами и известными кодами.
 
-# vary one parameter over several seeds (in parallel), per-run rows to CSV
-.venv/bin/python -m emergent_codes sweep noise 0,0.02,0.05,0.1 --seeds 30 --out results/noise.csv
+**Гипотеза.** Минимальное расстояние самоорганизованного кода растёт с уровнем шума в канале — система сама подстраивает избыточность под условия передачи.
 
-.venv/bin/pytest
+## Цель и задачи
+
+**Цель** — проверить на имитационной модели, возникает ли в популяции узлов без заданного кода помехоустойчивый код, и выяснить, при каких условиях его минимальное расстояние растёт с уровнем шума.
+
+**Задачи:**
+
+1. Построить имитационную модель передачи сообщений в популяции узлов, в которой отображение сообщений в векторы не задаётся.
+2. Разработать методику извлечения кода из состояния популяции и измерения его параметров: числа слов, минимального расстояния, доли ошибок декодирования.
+3. Исследовать зависимость минимального расстояния от уровня шума и найти область параметров, в которой код устойчив.
+4. Сравнить полученные коды со случайными кодами, границей Хэмминга и известными кодами.
+5. Проверить устойчивость выводов к допущениям модели: размеру популяции, правилу пересчёта записей, безошибочности метки роли.
+
+## Объект и предмет исследования
+
+- **Объект** — процесс передачи сообщений по двоичному симметричному каналу в популяции узлов, хранящих накопленные векторы и декодирующих принятые сообщения по минимуму расстояния.
+- **Предмет** — свойства кода, самопроизвольно складывающегося в такой популяции: число слов, минимальное расстояние, доля ошибок декодирования и их зависимость от уровня шума и параметров модели.
+
+---
+
+## Модель
+
+Популяция из `N` узлов обменивается двоичными векторами длины `n`. Каждая передача несёт **метку роли** — номер сообщения из `{0, …, R − 1}`: роль обозначает, *о чём* сообщение, а вектор — *как* оно выглядит. Связь между ними не задаётся. Канал инвертирует каждый бит вектора с вероятностью `p`, метка роли доходит без искажений.
+
+Каждый узел хранит записи «вектор, роль, вес». Одна передача:
+
+1. Случайно выбираются отправитель и получатель.
+2. Отправитель равновероятно выбирает роль и среди своих записей этой роли — одну с вероятностью, пропорциональной весу. Если записей роли нет, он придумывает случайный вектор и сохраняет его.
+3. Вектор проходит через канал.
+4. Получатель находит у себя ближайшую по расстоянию Хэмминга запись:
+   - расстояние не больше радиуса слияния `θ` и роль совпадает — **подкрепление**: вес растёт, вектор записи сдвигается к принятому побитовым большинством;
+   - расстояние не больше `θ`, но роль другая — **путаница ролей**: вес чужой записи умножается на `κ`, принятый вектор сохраняется как новая запись своей роли;
+   - иначе — принятый вектор сохраняется как новая запись.
+
+После каждого такта (`N` передач) веса всех записей умножаются на `1 − λ`, записи с весом ниже порога удаляются.
+
+**Побитовое большинство.** Запись хранит для каждой позиции `i` долю единиц `μᵢ` среди объединённых в неё векторов. При подкреплении вектором `x` с прибавкой веса `a`:
+
+```
+μᵢ ← (w · μᵢ + a · xᵢ) / (w + a),     bᵢ = 1 при μᵢ ≥ 0.5,     w ← w + a
 ```
 
-Code layout (`emergent_codes/`):
+Это пересчёт взвешенного среднего: без забывания получается обычное большинство голосов всех объединённых векторов, с забыванием старые векторы влияют слабее новых.
 
-| Module | Contents |
+Путаница ролей — единственный механизм, который расталкивает слова разных сообщений: слово, стоящее близко к слову другой роли, штрафуется и вымирает. Шум делает такие встречи чаще.
+
+## Что измеряется
+
+После прогона записи всех узлов объединяются и жадно кластеризуются по расстоянию Хэмминга; кластеры с долей веса меньше 2 % считаются шумом. Центры остальных образуют код `C`.
+
+| Величина | Смысл |
 |---|---|
-| `config.py` | `SimConfig` — every parameter, with README symbols in comments |
-| `channel.py` | binary symmetric channel |
-| `node.py` | record store: receive (min-distance decoding), choose, forget |
-| `simulation.py` | population dynamics, init modes (`random`, `empty`, `hamming74`), turnover |
-| `analysis.py` | pooling and clustering records into `C`; `\|C\|`, `k`, `d`, purity, decoding error, bounds |
-| `codes.py` | Hamming distance, Hamming / Singleton bounds, Hamming [7,4] |
-| `cli.py` | `run` and `sweep` commands |
+| `\|C\|`, `k = log₂\|C\|` | число слов кода и число бит на слово |
+| `d` | минимальное расстояние по всем парам слов |
+| `d_roles` | минимальное расстояние между словами *разных* ролей |
+| `d_top` | минимальное расстояние между самыми тяжёлыми словами каждой роли (ровно `R` слов) — **основная метрика** |
+| чистота `η` | доля веса слова, приходящаяся на его доминирующую роль |
+| доля ошибок `ε` | слова `C` пропускаются через канал и декодируются по минимуму расстояния |
 
-Choices made in v0.1 that the text above leaves open:
+Эталоны сравнения: среднее минимальное расстояние случайного кода из `R` слов и граница Хэмминга.
 
-- the speaker picks a role uniformly, then a record of that role by weight; with no record for the role it invents a random vector and keeps it;
-- on a different-role match the record's weight is multiplied by `role_penalty` **and** the input is stored as a new record of the correct role;
-- newcomers under turnover start empty;
-- clusters holding less than 2% of the pooled weight are treated as noise, not codewords.
+---
 
-Experiment scripts (`experiments/`, raw results go to the gitignored `results/`):
+## Стек технологий
 
-| Script | Series |
+| Назначение | Инструмент |
 |---|---|
-| `v01.sh` | noise sweep, `θ × λ` map, number of roles, [7,4] control, noise sweep at larger `θ` |
-| `v02.py` | generality over `n` and `R`, `R = 1` long runs, [7,4] control at `R = 16`, `d` ceiling analysis |
-| `v02_checks.py` | [7,4] control with `λ` scaled to `R`; generality with `θ` scaled to `n` |
-| `v03.py` | number of roles with `λ ∝ 1/R`; `n = 16…24` with 30 seeds |
+| Язык | Python 3.11 |
+| Вычисления | NumPy |
+| Параллельные развёртки | `concurrent.futures` (стандартная библиотека) |
+| Интерфейс командной строки | `argparse` (стандартная библиотека) |
+| Тестирование | pytest |
+| Форматирование кода | Black (длина строки 120), isort |
+| Сборка пакета | setuptools, `pyproject.toml` |
+| Контроль версий | Git |
+
+Нейросети и обучаемые модели сознательно не используются: каждый наблюдаемый эффект должен сводиться к понятной причине.
+
+## Структура репозитория
+
+```
+.
+├── self_organized_codes/     пакет с моделью
+│   ├── config.py             SimConfig — все параметры модели
+│   ├── channel.py            двоичный симметричный канал
+│   ├── node.py               узел: приём, выбор записи, забывание
+│   ├── simulation.py         динамика популяции, режимы начального состояния
+│   ├── analysis.py           извлечение кода C и метрики
+│   ├── codes.py              расстояние Хэмминга, границы, код Хэмминга [7,4]
+│   └── cli.py                команды run и sweep
+├── tests/                    автоматические тесты (13 шт.)
+├── experiments/v01.sh        серии экспериментов версии v0.1
+├── docs/v1_summary.docx      отчёт по версии v0.1 (ГОСТ 7.32)
+├── pyproject.toml            зависимости и настройки инструментов
+├── README.md                 этот файл
+└── README.en.md              английская версия
+```
+
+Сырые результаты экспериментов записываются в `results/` и в репозиторий не попадают.
+
+## Установка и запуск
+
+Нужен Python 3.11 или новее.
+
+```bash
+git clone [ссылка на репозиторий]
+cd [папка репозитория]
+python3.11 -m venv .venv
+.venv/bin/pip install -e '.[dev]'
+```
+
+**Одиночный прогон.** Любое поле `SimConfig` переопределяется как `ключ=значение`:
+
+```bash
+.venv/bin/python -m self_organized_codes run --set noise=0.04 ticks=10000 --snapshot-every 2500
+```
+
+**Развёртка по параметру** — несколько независимых запусков на каждое значение, параллельно; строки прогонов сохраняются в CSV:
+
+```bash
+.venv/bin/python -m self_organized_codes sweep noise 0,0.02,0.04,0.06 --seeds 30 --set ticks=10000 --out results/noise.csv
+```
+
+**Из Python:**
+
+```python
+from self_organized_codes import SimConfig, Simulation
+
+result = Simulation(SimConfig(n=12, n_roles=4, noise=0.04, ticks=10_000, seed=0)).run()
+print(result.metrics["d_top"], result.metrics["code_size"])
+```
+
+**Тесты и серии экспериментов v0.1:**
+
+```bash
+.venv/bin/pytest
+./experiments/v01.sh          # несколько минут; результаты в results/v01/
+```
+
+> По умолчанию `ticks = 3000`; для устойчивых результатов используйте `ticks=10000`.
+
+## Параметры модели
+
+| Обозначение | Поле `SimConfig` | Смысл | По умолчанию |
+|---|---|---|---|
+| `n` | `n` | длина вектора | 12 |
+| `R` | `n_roles` | число ролей (сообщений) | 4 |
+| `p` | `noise` | вероятность инвертирования бита | 0.05 |
+| `N` | `n_nodes` | число узлов | 20 |
+| — | `interactions_per_tick` | передач за такт; `0` — по одной на узел (`N`) | 0 |
+| `θ` | `merge_radius` | радиус слияния | 2 |
+| `λ` | `decay` | доля веса, теряемая за такт | 0.03 |
+| `κ` | `role_penalty` | множитель веса при путанице ролей | 0.1 |
+| `a` | `reinforce` | прибавка веса при подкреплении | 1 |
+| `w₀` | `new_weight` | вес новой записи | 1 |
+| `w_min` | `min_weight` | порог удаления записи | 0.1 |
+| `m` | `init_records_per_role` | начальное число записей на роль | 3 |
+| `L` | `turnover` | вероятность замены узла новым | 0 |
+| `T` | `ticks` | длительность прогона, тактов | 3000 |
+| — | `init` | начальное состояние: `random`, `empty`, `hamming74` | `random` |
+| — | `seed` | начальное значение генератора случайных чисел | 0 |
 
 ---
 
-## Findings so far (v0.1–v0.3)
+## Результаты версии v0.1
 
-Unless stated otherwise: `N = 20` nodes, 10 000 ticks, `role_penalty = 0.1`, `λ = 0.12 / R` (0.03 at `R = 4`).
-Numbers are mean ± sd over seeds; "significant" means the slope of `d_top` on `p` has `|t| ≥ 3`. These are
-exploratory series: 10 seeds each unless 30 are stated, below the 30-seed standard set for final results.
+Условия: `n = 12`, `R = 4`, `N = 20`, `θ = 2`, `λ = 0.03`, `κ = 0.1`, 10 000 тактов; развёртка по шуму — 30 запусков, остальные серии — 10.
 
-**1. In the densely packed regime, noise increases the minimum distance.** At `n = 12, R = 4, θ = 2` (30 seeds)
-`d_top` grows from 4.0 ± 0.85 at `p = 0` — no better than a random 4-word code (3.8) — to 5.5 ± 0.7 at `p = 0.04`,
-with all roles present and purity ≈ 1. The slope is significant for `n = 8` (`R = 2, 4`), `n = 12` (`R = 2, 4`) and
-`n = 16` (`R = 4`: t = 4.7, `R = 8`: t = 4.5, 30 seeds each); it is weaker at `n = 12, R = 8` (t = 2.2) and absent at
-`n = 8, R = 8`, where the system is overloaded (purity 0.64).
+| `p` | `d_top` | слов в `C` | чистота |
+|---|---|---|---|
+| 0 | 3,97 ± 0,85 | 4,7 | 1,00 |
+| 0,02 | 4,80 ± 0,55 | 4,7 | 1,00 |
+| 0,04 | 5,50 ± 0,68 | 4,3 | 1,00 |
+| 0,06 | 4,27 ± 0,87 | 12,8 | 0,76 |
+| 0,10 | 4,37 ± 1,07 | 10,5 | 0,59 |
 
-**2. It is not a general law.** The effect disappears when random words are already far apart relative to `θ`:
-`n = 20` is borderline (t ≈ 2), `n = 24` shows nothing (30 seeds), and `R = 2` at `n ≥ 16` never does. Refined
-hypothesis: *`d` grows with `p` while the code is densely packed (random `d` within roughly `θ + 2…4`) and noise
-stays below the decoding radius.*
+- Без шума `d_top` равно минимальному расстоянию случайного кода из 4 слов (3,81): самоорганизации расстояния нет. При росте `p` до 0,04 `d_top` увеличивается до 5,5 при сохранении всех ролей, что согласуется с гипотезой.
+- При `p ≈ 0,05–0,06` код разрушается: слов примерно втрое больше, роли смешиваются, доля ошибок декодирования — несколько процентов. При большем `θ` разрушение наступает позже.
+- Устойчивый режим (одно слово на роль) — при `θ ≥ 2` и `λ ≤ 0,03`.
+- При `R ≥ 8` часть ролей теряется.
+- Не подтвердилось: при `R = 1` популяция с шумом не вырождается в один вектор; контроль с кодом Хэмминга [7,4] при `R = 4` неинформативен.
 
-**3. Too much noise destroys the code instead of improving it.** Breakdown is set by the expected number of
-flipped bits `n·p` relative to `θ`, not by `p` alone: at `n = 12, θ = 2` it happens at `p ≈ 0.05–0.06` (the code
-splits into 10–13 mixed-role words, purity 0.5–0.75); at `θ = 3` it moves to `p ≈ 0.07`; at `n = 20–24` with `R ≥ 4`
-roles are lost already at `p = 0.04`. Consequently the useful noise window narrows as `n` grows.
+Подробное изложение — в [docs/v1_summary.docx](docs/v1_summary.docx).
 
-**4. `d` stalls well below the optimum.** At `n = 12, R = 4` `d_top` settles at 5.6–5.8 by ~10k ticks and does not
-move through 50k ticks for any `θ ∈ {2, 3, 4}`; the optimum is 8 (Plotkin, `A(12, 8) = 4`). The code looks like a
-*random code with an exclusion zone*: random 4-word codes conditioned on `d ≥ 5` / `d ≥ 6` average 5.15 / 6.01.
-Two causes:
-- repulsion is short-range: the chance that a noisy copy lands within `θ` of another role's word falls 15–20× per
-  unit of distance (at `θ = 2, d = 6, p = 0.04` it is 3·10⁻⁵ per message);
-- words are nearly immobile: at `θ = 4` the force at `d = 6` is still 1.7·10⁻² and `d` does not grow either,
-  because a heavy record's majority vector hardly moves and new variants only appear as noisy copies next to it.
+## Известные проблемы
 
-**5. Capacity in roles falls with noise, and is far below the bounds.** At `n = 12, θ = 2` with `λ ∝ 1/R` all
-16 roles survive at `p = 0.02` (purity 0.99; about 20 of 32 at `R = 32`), but only ~6 at `p = 0.05`. In the dense
-regime `d_top` is pinned at `θ + 1 = 3`. For comparison the Hamming bound at `n = 12, d = 3` is 315 words.
+- **Роль как внешняя подсказка.** Метка роли передаётся без искажений, поэтому получатель заранее знает, какое сообщение имелось в виду. Обнаружить путаницу и оттолкнуть слова друг от друга узел может только благодаря этой метке, так что наблюдаемое минимальное расстояние частично обязано обучению с учителем. Нужна проверка с зашумлённой меткой роли.
+- **Правило пересчёта записи.** Формула побитового большинства выбрана как простейшая и не выведена из требований к модели. Вес одновременно определяет выживание записи и её инерцию, что может ограничивать подвижность слов.
+- **Достигаемое `d_top` ниже оптимального:** около 5,5–5,8 при возможных 8 для 4 слов длины 12.
+- **Ручная настройка параметров:** результат заметно зависит от `κ`, `λ` и `θ`.
+- **Методика извлечения кода** зависит от радиуса кластеризации и порога 2 %; устойчивость выводов к этому выбору не проверена.
+- **Статистика:** часть серий проведена на 10 запусках вместо 30.
 
-**6. Forgetting must scale with the number of roles.** Each record is reinforced about once per `R` messages, so
-with a fixed `λ` large `R` is lost to forgetting rather than to noise: a node that forgets a role invents a random
-vector for it. With `λ = 0.03` the [7,4] code seeded at `R = 16` fell apart even at `p = 0`, and the apparent
-capacity limit of ~8 roles in v0.1 was this artefact. The relevant dimensionless quantities are `λ·R` and `n·p / θ`.
+## Дальнейшая работа
 
-**7. Controls.**
-- *Hamming [7,4], `R = 16`, `θ = 1`, `λ = 0.003`:* the seeded code survives intact (16/16 words on their roles,
-  `d = 3`) at `p ≤ 0.02` and almost intact at `p = 0.05` (15.4/16). A random start under the same parameters never
-  reaches `d = 3` (`d_top` 1.6–2.0). The dynamics preserves a good code but does not find a tight one.
-- *No roles (`R = 1`):* the population does *not* collapse to one vector when there is noise. Over 60k ticks at
-  `p = 0` it slowly coarsens (4.6 → 1.6 words, top word's share 0.41 → 0.85), but at `p = 0.05` diversity is
-  stationary (≈5 words, top share ≈0.45, 15% of messages create records): a mutation–drift balance. The result is
-  synonyms without separation (`d ≈ 3`), not a code. Roadmap step 2 holds only in the noiseless limit.
+1. Проверить зависимость минимального расстояния от шума при других `n` и `R` и описать её в безразмерных координатах.
+2. Сравнить код с таблицами наилучших известных кодов.
+3. Вывести аналитически условия устойчивости кода и сверить их с моделью.
+4. Ослабить допущение о безошибочной метке роли: зашумлённая роль, частичная обратная связь.
+5. Проверить устойчивость к размеру популяции, её обновлению и правилу пересчёта записей.
 
-**Open questions.** What limits capacity at ~20 roles at `p = 0.02`, given that geometry allows far more? Would a
-mechanism for words to move (rather than only be selected) break the exclusion-zone ceiling, and does adding it
-stay within the design constraints above?
+## Документация
 
----
-
-## Status
-
-v0.3: the model, measurement and sweep tooling are implemented and tested; the exploratory series above are done.
-Defaults (`decay = 0.03`, `role_penalty = 0.1`) are tuned for `R = 4`; for other `R` use `decay = 0.12 / R`.
-
-Roadmap:
-
-1. Single node, closed on itself
-2. Population without roles — confirm that it degenerates
-3. Roles enabled; map the parameter region where the repertoire survives
-4. Noise sweep — the main result
-5. Controls
-6. Comparison against bounds and known codes
-
----
-
-## Out of scope
-
-Deliberately left out, kept as directions for further work: the environment as a node with its own parameters, links between records and spreading activation, consolidation and reflection, modelling the addressee when choosing what to send, variable edge weights, representations based on compression or embeddings.
-
-None of them serve the question being asked, and adding them turns the project back into architecture-building.
+- [docs/v1_summary.docx](docs/v1_summary.docx) — отчёт по версии v0.1, оформленный по ГОСТ 7.32-2017: термины и обозначения, модель, результаты, проблемы.
+- Docstrings всех модулей, классов и функций пакета `self_organized_codes` в формате reST (`:param:`, `:return:`, `:raises:`).

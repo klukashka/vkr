@@ -7,18 +7,24 @@ from typing import Any
 
 import numpy as np
 
-from emergent_codes.analysis import summarize
-from emergent_codes.channel import random_vector, transmit
-from emergent_codes.codes import hamming74
-from emergent_codes.config import SimConfig
-from emergent_codes.node import Node, Outcome
+from self_organized_codes.analysis import summarize
+from self_organized_codes.channel import random_vector, transmit
+from self_organized_codes.codes import hamming74
+from self_organized_codes.config import SimConfig
+from self_organized_codes.node import Node, Outcome
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class RunResult:
-    """Outcome of one run: the config, final metrics and periodic snapshots of cheap metrics."""
+    """Hold the outcome of one run.
+
+    :ivar config: parameters of the run.
+    :ivar metrics: end-of-run metrics, as returned by :func:`~self_organized_codes.analysis.summarize`.
+    :ivar history: periodic snapshots of the metrics, each with a ``"tick"`` key; empty if snapshots were disabled.
+    :ivar outcomes: number of reinforcements, confusions and created records over the whole run.
+    """
 
     config: SimConfig
     metrics: dict[str, Any]
@@ -27,15 +33,25 @@ class RunResult:
 
 
 class Simulation:
-    """A fully mixed population of ``N`` nodes.
+    """Simulate a fully mixed population of ``N`` nodes.
 
-    One tick = ``interactions_per_tick`` transmissions, then forgetting, then turnover. In a transmission a random
+    One tick is ``interactions_per_tick`` transmissions, then forgetting, then turnover. In a transmission a random
     speaker picks a role uniformly, draws one of its records of that role by weight and sends it through the channel
     to a random listener. A speaker with no record for the role invents a random vector and stores it as its own
     record for that role — this is the only source of novelty besides channel noise.
+
+    :ivar cfg: simulation parameters.
+    :ivar rng: random generator seeded with ``cfg.seed``.
+    :ivar tick: number of completed ticks.
+    :ivar outcomes: running count of reception outcomes, keyed by :class:`~self_organized_codes.node.Outcome` value.
+    :ivar nodes: the population.
     """
 
     def __init__(self, cfg: SimConfig) -> None:
+        """Create the population in its initial state.
+
+        :param cfg: simulation parameters.
+        """
         self.cfg = cfg
         self.rng = np.random.default_rng(cfg.seed)
         self.tick = 0
@@ -45,6 +61,13 @@ class Simulation:
     # ---------------------------------------------------------- construction
 
     def _initial_node(self) -> Node:
+        """Create one node according to ``cfg.init``.
+
+        ``"random"`` gives ``init_records_per_role`` random records per role, ``"empty"`` gives none, and
+        ``"hamming74"`` gives all Hamming [7,4] codewords distributed over the roles in turn.
+
+        :return: the new node.
+        """
         cfg = self.cfg
         node = Node(cfg.n)
         if cfg.init == "random":
@@ -59,6 +82,10 @@ class Simulation:
     # -------------------------------------------------------------- dynamics
 
     def transmit_once(self) -> Outcome:
+        """Perform one speaker-to-listener transmission.
+
+        :return: what happened to the message at the listener.
+        """
         cfg, rng = self.cfg, self.rng
         s, t = rng.choice(cfg.n_nodes, size=2, replace=False)
         speaker, listener = self.nodes[s], self.nodes[t]
@@ -72,6 +99,7 @@ class Simulation:
         return outcome
 
     def step(self) -> None:
+        """Advance the simulation by one tick: transmissions, forgetting, then turnover."""
         cfg = self.cfg
         for _ in range(cfg.effective_interactions):
             self.transmit_once()
@@ -83,13 +111,18 @@ class Simulation:
         self.tick += 1
 
     def metrics(self, trials: int = 2000) -> dict[str, Any]:
+        """Measure the code currently held by the population.
+
+        :param trials: number of codewords transmitted in the decoding test.
+        :return: flat dictionary of metrics, see :func:`~self_organized_codes.analysis.summarize`.
+        """
         return summarize(self.nodes, self.cfg.n_roles, self.cfg.noise, self.cfg.merge_radius, self.rng, trials=trials)
 
     def run(self, snapshot_every: int = 0) -> RunResult:
-        """Run ``cfg.ticks`` ticks.
+        """Run ``cfg.ticks`` ticks and measure the result.
 
         :param snapshot_every: record intermediate metrics every this many ticks (0 disables snapshots).
-        :return: final metrics and history.
+        :return: final metrics, snapshot history and outcome counts.
         """
         history: list[dict[str, Any]] = []
         for _ in range(self.cfg.ticks):

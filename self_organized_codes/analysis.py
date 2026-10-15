@@ -1,4 +1,4 @@
-"""Extract the emergent code from a population and measure it."""
+"""Extract the self-organized code from a population and measure it."""
 
 from dataclasses import dataclass
 from math import log2
@@ -6,26 +6,35 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from emergent_codes.channel import transmit
-from emergent_codes.codes import hamming_bound, min_distance, pairwise_distances, singleton_bound
-from emergent_codes.node import Node
+from self_organized_codes.channel import transmit
+from self_organized_codes.codes import hamming_bound, min_distance, pairwise_distances, singleton_bound
+from self_organized_codes.node import Node
 
 
 @dataclass
 class Codebook:
-    """The candidate code ``C``: cluster centers of all pooled records.
+    """Hold the code ``C``: cluster centers of all pooled records.
 
     ``roles[i]`` is the weight-dominant role of cluster ``i`` and ``purity[i]`` the share of its weight carried by
     that role.
+
+    :ivar words: ``(K, n)`` ``uint8`` array of codewords.
+    :ivar weights: ``(K,)`` total record weight per cluster.
+    :ivar roles: ``(K,)`` dominant role per cluster.
+    :ivar purity: ``(K,)`` share of each cluster's weight carried by its dominant role, in ``(0, 1]``.
     """
 
-    words: np.ndarray  # (K, n) uint8
-    weights: np.ndarray  # (K,) total record weight per cluster
-    roles: np.ndarray  # (K,) dominant role
-    purity: np.ndarray  # (K,) in (0, 1]
+    words: np.ndarray
+    weights: np.ndarray
+    roles: np.ndarray
+    purity: np.ndarray
 
     @property
     def size(self) -> int:
+        """Number of codewords.
+
+        :return: ``|C|``.
+        """
         return len(self.words)
 
 
@@ -88,10 +97,16 @@ def extract_code(nodes: Sequence[Node], n_roles: int, radius: int, min_share: fl
 def decoding_error(
     code: Codebook, noise: float, trials: int, rng: np.random.Generator
 ) -> tuple[float | None, float | None]:
-    """Push random codewords of ``C`` through the channel and decode by minimum distance.
+    """Push random codewords of ``C`` through the channel and decode them by minimum distance.
 
-    :return: ``(word_error_rate, role_error_rate)``; ``(None, None)`` for an empty code. A word error is decoding to
-        a different codeword; a role error is decoding to a codeword whose dominant role differs.
+    A word error is decoding to a different codeword; a role error is decoding to a codeword whose dominant role
+    differs. Ties between equally close codewords are broken at random.
+
+    :param code: codebook to test.
+    :param noise: per-bit flip probability of the channel.
+    :param trials: number of transmitted codewords.
+    :param rng: random generator.
+    :return: ``(word_error_rate, role_error_rate)``, or ``(None, None)`` for an empty code.
     """
     if code.size == 0:
         return None, None
@@ -108,7 +123,13 @@ def decoding_error(
 
 
 def cross_role_distance(code: Codebook) -> int | None:
-    """Minimum distance between codewords of different dominant roles (synonym pairs are ignored)."""
+    """Compute the minimum distance between codewords of different dominant roles.
+
+    Pairs of synonyms (codewords of the same role) are ignored.
+
+    :param code: codebook to measure.
+    :return: ``d_roles``, or ``None`` if fewer than two roles are covered.
+    """
     if len(set(code.roles.tolist())) < 2:
         return None
     dist = pairwise_distances(code.words)
@@ -116,7 +137,11 @@ def cross_role_distance(code: Codebook) -> int | None:
 
 
 def top_word_indices(code: Codebook) -> list[int]:
-    """Index of the heaviest codeword of each covered role, in increasing role order."""
+    """Find the heaviest codeword of each covered role.
+
+    :param code: codebook to inspect.
+    :return: indices into ``code.words``, one per covered role, in increasing role order.
+    """
     return [
         int(np.flatnonzero(code.roles == r)[np.argmax(code.weights[code.roles == r])]) for r in np.unique(code.roles)
     ]
@@ -131,7 +156,17 @@ def summarize(
     min_share: float = 0.02,
     trials: int = 2000,
 ) -> dict[str, Any]:
-    """All end-of-run metrics as a flat dict (suitable for a CSV row)."""
+    """Extract the code from a population and compute all end-of-run metrics.
+
+    :param nodes: population to analyse.
+    :param n_roles: number of role labels ``R``.
+    :param noise: per-bit flip probability, used to measure decoding errors.
+    :param radius: clustering radius (normally the merge radius ``theta``).
+    :param rng: random generator for the decoding test.
+    :param min_share: minimum fraction of total pooled weight for a cluster to count as a codeword.
+    :param trials: number of codewords transmitted in the decoding test.
+    :return: flat dictionary of metrics, suitable for a CSV row; undefined metrics are ``None``.
+    """
     code = extract_code(nodes, n_roles, radius, min_share)
     n = nodes[0].n
     d = min_distance(code.words)
