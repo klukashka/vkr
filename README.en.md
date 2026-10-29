@@ -91,6 +91,7 @@ Each configuration is run with several seeds (30 for the main noise sweep, 10 fo
 Python 3.11+, NumPy only.
 
 ```bash
+git clone https://github.com/klukashka/vkr.git && cd vkr
 python3.11 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 
 # single run; override any SimConfig field with KEY=VALUE
